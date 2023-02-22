@@ -1,5 +1,7 @@
 package com.example.demo;
 
+import com.example.demo.DTOs.AccountDTO;
+import com.example.demo.DTOs.TransactionDTO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -12,7 +14,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.math.BigInteger;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Objects;
@@ -20,22 +21,24 @@ import java.util.Objects;
 @RestController
 public class Controller {
 
-    private final InMemoryUserDetailsManager manager;
+    private final InMemoryUserDetailsManager inMemoryUserDetailsManager;
+    private final OperationManager operationManager;
 
     @Autowired
-    public Controller(InMemoryUserDetailsManager manager) {
-        this.manager = manager;
+    public Controller(InMemoryUserDetailsManager manager, OperationManager operationManager) {
+        this.inMemoryUserDetailsManager = manager;
+        this.operationManager = operationManager;
     }
 
     @GetMapping("/")
-    public String userExists() {
+    public String hello() {
         return "Hello. It's bank lol";
     }
 
     // @GetMapping("/createAccount")
     @PostMapping("/createAccount")
-    public AccountDTO createAccount(double balance, String password) throws Exception {
-        AccountDTO account = OperationManager.createAccount(balance);
+    public AccountDTO createAccount(double balance, String password) {
+        AccountDTO account = operationManager.createAccount(balance);
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         Collection<? extends GrantedAuthority> currentPrincipalRoles = authentication.getAuthorities();
 
@@ -43,8 +46,8 @@ public class Controller {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         }
 
-        manager.createUser(User.withDefaultPasswordEncoder()
-                .username(account.getId().toString())
+        inMemoryUserDetailsManager.createUser(User.withDefaultPasswordEncoder()
+                .username(String.valueOf(account.getId()))
                 .password(password)
                 .roles("USER")
                 .build());
@@ -54,68 +57,65 @@ public class Controller {
 
     // @GetMapping("/createTransaction")
     @PostMapping("/createTransaction")
-    public TransactionDTO createTransaction(BigInteger sender, BigInteger receiver, double money) throws Exception {
+    public TransactionDTO createTransaction(long receiver, double money) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String currentPrincipalName = authentication.getName();
-        if (!Objects.equals(currentPrincipalName, sender.toString())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
-        }
-        return OperationManager.createTransaction(sender, receiver, money);
+        return operationManager.createTransaction(Long.parseLong(currentPrincipalName), receiver, money);
     }
 
     // @GetMapping("/cancelTransaction")
     @PostMapping("/cancelTransaction")
-    public TransactionDTO cancelTransaction(BigInteger id) throws Exception {
+    public TransactionDTO cancelTransaction(long id) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String currentPrincipalName = authentication.getName();
         Collection<? extends GrantedAuthority> currentPrincipalRoles = authentication.getAuthorities();
+
         if ((!Objects.equals(
                 currentPrincipalName,
-                OperationManager.getTransaction(id).getSender().toString())
+                String.valueOf(operationManager.getTransaction(id).getSender()))
         )
                 && (!Objects.equals(
                         currentPrincipalName,
-                OperationManager.getTransaction(id).getReceiver().toString())
+                String.valueOf(operationManager.getTransaction(id).getReceiver()))
         )
                 && (currentPrincipalRoles.stream().noneMatch(r -> r.getAuthority().equals("ROLE_ADMIN")))
         ) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         }
-        return OperationManager.cancelTransaction(id);
+        return operationManager.cancelTransaction(id);
     }
 
     @GetMapping("/getAccount")
-    public AccountDTO getAccount(BigInteger id) {
+    public AccountDTO getAccount(long id) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String currentPrincipalName = authentication.getName();
         Collection<? extends GrantedAuthority> currentPrincipalRoles = authentication.getAuthorities();
-        if ((!Objects.equals(currentPrincipalName, id.toString())
+        if ((!Objects.equals(currentPrincipalName, String.valueOf(id))
                 && (currentPrincipalRoles.stream().noneMatch(r -> r.getAuthority().equals("ROLE_ADMIN"))))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         }
-        return OperationManager.getAccount(id);
+        return operationManager.getAccount(id);
     }
 
     @GetMapping("/getListAccounts")
-    public Map<BigInteger, AccountDTO> getListAccounts() {
+    public Map<Long, AccountDTO> getListAccounts() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        String currentPrincipalName = authentication.getName();
         Collection<? extends GrantedAuthority> currentPrincipalRoles = authentication.getAuthorities();
         if (currentPrincipalRoles.stream().noneMatch(r -> r.getAuthority().equals("ROLE_ADMIN"))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         }
 
-        return OperationManager.getListAccounts();
+        return operationManager.getListAccounts();
     }
 
     @GetMapping("/getListTransactions")
-    public Map<BigInteger, TransactionDTO> getListTransactions() {
+    public Map<Long, TransactionDTO> getListTransactions() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         Collection<? extends GrantedAuthority> currentPrincipalRoles = authentication.getAuthorities();
         if (currentPrincipalRoles.stream().noneMatch(r -> r.getAuthority().equals("ROLE_ADMIN"))) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         }
 
-        return OperationManager.getListTransactions();
+        return operationManager.getListTransactions();
     }
 }

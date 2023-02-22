@@ -1,57 +1,81 @@
 package com.example.demo;
 
-import java.math.BigInteger;
+import com.example.demo.DTOs.AccountDTO;
+import com.example.demo.DTOs.TransactionDTO;
+import com.example.demo.Repositories.AccountRepository;
+import com.example.demo.Repositories.TransactionRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Component;
+import org.springframework.web.server.ResponseStatusException;
+
 import java.util.Map;
 
+@Component
 public class OperationManager {
-    public static AccountDTO createAccount(double balance) throws Exception {
+    
+    private final AccountRepository accountRepository;
+    private final TransactionRepository transactionRepository;
+
+    @Autowired
+    public OperationManager(@Qualifier("InMemoryAccountRepository") AccountRepository accountRepository,
+                            @Qualifier("InMemoryTransactionRepository") TransactionRepository transactionRepository) {
+        this.accountRepository = accountRepository;
+        this.transactionRepository = transactionRepository;
+    }
+
+    public AccountDTO createAccount(double balance) {
         if (balance <= 0) {
-            throw new Exception("Wrong balance");
+            throw new ResponseStatusException(HttpStatus.NOT_ACCEPTABLE, "Wrong balance");
         }
-        return InMemoryAccountRepository.createAccount(balance);
+        return accountRepository.createAccount(balance);
     }
 
-    public static AccountDTO addBalance(BigInteger id, double balance) throws Exception {
-        if ((balance < 0) && (InMemoryAccountRepository.getAccount(id).getBalance() < balance)) {
-            throw new Exception("Not enough money");
+    public AccountDTO addBalance(long id, double balance) {
+        if ((balance < 0) && (accountRepository.getAccount(id).getBalance() < balance)) {
+            throw new ResponseStatusException(HttpStatus.NOT_ACCEPTABLE, "Not enough money");
         }
-        return InMemoryAccountRepository.addBalance(id, balance);
+        return accountRepository.addBalance(id, balance);
     }
 
-    public static synchronized TransactionDTO createTransaction(BigInteger sender, BigInteger receiver, double money) throws Exception {
-        if (InMemoryAccountRepository.getAccount(sender).getBalance() < money) {
-            throw new Exception("Not enough money");
+    public synchronized TransactionDTO createTransaction(long sender, long receiver, double money) {
+        if (accountRepository.getAccount(sender).getBalance() < money) {
+            throw new ResponseStatusException(HttpStatus.NOT_ACCEPTABLE, "Not enough money");
         }
         if (money < 0) {
-            throw new Exception("Not correct sum");
+            throw new ResponseStatusException(HttpStatus.NOT_ACCEPTABLE, "Not correct sum");
         }
-        TransactionDTO transaction = InMemoryTransactionRepository.createTransaction(sender, receiver, money);
-        InMemoryAccountRepository.commitTransaction(transaction);
+        TransactionDTO transaction = transactionRepository.createTransaction(sender, receiver, money);
+        accountRepository.commitTransaction(transaction);
         return transaction;
     }
 
-    public static synchronized TransactionDTO cancelTransaction(BigInteger id) throws Exception {
-        TransactionDTO transaction = InMemoryTransactionRepository.getTransaction(id);
+    public synchronized TransactionDTO cancelTransaction(long id) {
+        TransactionDTO transaction = transactionRepository.getTransaction(id);
         if (transaction.isCancelled()) {
             return transaction;
         }
-        InMemoryAccountRepository.cancelTransaction(transaction);
-        return InMemoryTransactionRepository.cancelTransaction(id);
+        if (accountRepository.getAccount(transaction.getReceiver()).getBalance() < transaction.getMoney()) {
+            throw new ResponseStatusException(HttpStatus.NOT_ACCEPTABLE, "Not enough money");
+        }
+        accountRepository.cancelTransaction(transaction);
+        return transactionRepository.cancelTransaction(id);
     }
 
-    public static AccountDTO getAccount(BigInteger id) {
-        return InMemoryAccountRepository.getAccount(id);
+    public AccountDTO getAccount(long id) {
+        return accountRepository.getAccount(id);
     }
 
-    public static TransactionDTO getTransaction(BigInteger id) {
-        return InMemoryTransactionRepository.getTransaction(id);
+    public TransactionDTO getTransaction(long id) {
+        return transactionRepository.getTransaction(id);
     }
 
-    public static Map<BigInteger, AccountDTO> getListAccounts() {
-        return InMemoryAccountRepository.accounts;
+    public Map<Long, AccountDTO> getListAccounts() {
+        return accountRepository.getAccounts();
     }
 
-    public static Map<BigInteger, TransactionDTO> getListTransactions() {
-        return InMemoryTransactionRepository.transactions;
+    public Map<Long, TransactionDTO> getListTransactions() {
+        return transactionRepository.getTransactions();
     }
 }
